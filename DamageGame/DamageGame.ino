@@ -22,29 +22,20 @@ Color getRoleColor() {
 
 byte _health;
 void damageHealth() {
-  if(_health == 0)
+  if (_health == 0)
     return;
 
-   --_health;
+  --_health;
 }
 
 void repairHealth() {
   ++_health;
 
-  if(_health > 6) {
+  if (_health > 6) {
     _health = 6;
   }
 }
 
-
-bool isConnectedOnOneOrMoreFaces() {
-  FOREACH_FACE(face) {
-    if (!isValueReceivedOnFaceExpired(face)) {
-      return true;
-    }
-  }
-  return false;
-}
 
 void setup() {
   setValueSentOnAllFaces(0);
@@ -52,14 +43,24 @@ void setup() {
 }
 
 void loop() {
-  // Double Click Sets Role
+  logic();
+
+  display();
+}
+
+// Messages
+enum messages { None, Recieved, Damage, Repair };
+byte messageState[6] = { None, None, None, None, None, None };
+
+void logic() {
+  // Controls
   if (buttonDoubleClicked()) {
     switch (_role) {
       case ROLE_BASE:
-        if (isConnectedOnOneOrMoreFaces()) {
+        if (isAlone()) {
           setRole(ROLE_HAZARD);
         } else {
-          setRole(ROLE_RESOURCE);
+          setRole(ROLE_BASE);
         }
         break;
       case ROLE_HAZARD:
@@ -71,63 +72,76 @@ void loop() {
     }
   }
 
-
-  communication();
-
-  display();
-}
-
-// Messages
-#define MESSAGE_NONE      0
-#define MESSAGE_RECIEVED  1
-#define MESSAGE_DAMAGE    2
-
-#define MESSAGE_TIMER_LENGTH    300
-#define LISTENING_TIMER_LENGTH  300
-
-Timer eventTimer;
-Timer listeningTimer;
-void communication() {
-  // Sending Events
-  bool canSendEvents = eventTimer.isExpired();
-  if (canSendEvents) {
-    if(buttonSingleClicked()) {
-      setValueSentOnAllFaces(MESSAGE_DAMAGE);
-      eventTimer.set(MESSAGE_TIMER_LENGTH);
-    } else {
-      setValueSentOnAllFaces(MESSAGE_NONE); // We want to explicitly send none by default.
+  if (buttonSingleClicked()) {
+    FOREACH_FACE(f) {
+      messageState[f] = Damage;
+    }
+  }
+  
+  // Listen for messages
+  FOREACH_FACE(f) {
+    switch (messageState[f]) {
+      case None:  // Message is listening
+        standardLoop(f);
+        break;
+      case Recieved:  // We have recieved a message and are waiting for the channel to clear.
+        listeningLoop(f);
+        break;
+      default:  // We have sent a message and are waiting for confirmation.
+        activeLoop(f);
+        break;
     }
   }
 
-  // Stop sending events when eve
-  FOREACH_FACE(face) {
-    if (getLastValueReceivedOnFace(face) == MESSAGE_RECIEVED) {
-      setValueSentOnFace(MESSAGE_NONE, face);
-    }
-  }
-
-  // Listening for events
-  bool isListening = listeningTimer.isExpired();
-  if (isListening) {
-    FOREACH_FACE(face) {
-      if (isValueReceivedOnFaceExpired(face))
-        continue;
-      
-      if (getLastValueReceivedOnFace(face) == MESSAGE_DAMAGE) {
-        damageHealth();
-        setValueSentOnFace(MESSAGE_RECIEVED, face);
-        listeningTimer.set(LISTENING_TIMER_LENGTH);
-      }
-    }
+  // Set messages
+  FOREACH_FACE(f) {
+    setValueSentOnFace(messageState[f], f);
   }
 }
+
+void standardLoop(byte face) {
+  // Do we have a neighbor
+  if (isValueReceivedOnFaceExpired(face))
+    return;
+
+  // Did the neighbor send a real message.
+  byte neighborMessage = getLastValueReceivedOnFace(face);
+  if (neighborMessage == None || neighborMessage == Recieved)
+    return;
+
+  // Mark that we recieved the message
+  messageState[face] = Recieved;
+
+  // Handle Message
+  switch (neighborMessage) {
+    case Damage:
+      damageHealth();
+      messageState[(face + 3) % 6] = Damage;
+      break;
+  }
+}
+
+void listeningLoop(byte face) {
+  // The channel is clear.
+  if (isValueReceivedOnFaceExpired(face) || getLastValueReceivedOnFace(face) == None) {
+    messageState[face] = None;
+  }
+}
+
+void activeLoop(byte face) {
+  // Our message is recieved or there is no recipient
+  if (isValueReceivedOnFaceExpired(face) || getLastValueReceivedOnFace(face) == Recieved) {
+    messageState[face] = None;
+  }
+}
+
 
 // Display
 void display() {
   displayHealth();
 }
 
-void displayHealth(){
+void displayHealth() {
   Color color = getRoleColor();
 
   byte faceIndex = 0;
