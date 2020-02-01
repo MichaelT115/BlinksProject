@@ -46,36 +46,80 @@ bool isConnectedOnOneOrMoreFaces() {
   return false;
 }
 
-
 void setup() {
   setValueSentOnAllFaces(0);
   _health = 6;
 }
 
 void loop() {
-  if (buttonSingleClicked()) {
-    if (isConnectedOnOneOrMoreFaces()) {
-      setRole(ROLE_BASE);
-    } else {
-      setRole(ROLE_RESOURCE);
+  // Double Click Sets Role
+  if (buttonDoubleClicked()) {
+    switch (_role) {
+      case ROLE_BASE:
+        if (isConnectedOnOneOrMoreFaces()) {
+          setRole(ROLE_HAZARD);
+        } else {
+          setRole(ROLE_RESOURCE);
+        }
+        break;
+      case ROLE_HAZARD:
+        setRole(ROLE_BASE);
+        break;
+      case ROLE_RESOURCE:
+        setRole(ROLE_BASE);
+        break;
     }
   }
 
-  if (buttonDoubleClicked()){
-    if (_role == ROLE_BASE) {
-      damageHealth();
-    } else if (_role == ROLE_RESOURCE) {
-      repairHealth();
-    }
-  }
 
   communication();
 
   display();
 }
 
+// Messages
+#define MESSAGE_NONE      0
+#define MESSAGE_RECIEVED  1
+#define MESSAGE_DAMAGE    2
+
+#define MESSAGE_TIMER_LENGTH    300
+#define LISTENING_TIMER_LENGTH  300
+
+Timer eventTimer;
+Timer listeningTimer;
 void communication() {
-  setValueSentOnAllFaces(0);  
+  // Sending Events
+  bool canSendEvents = eventTimer.isExpired();
+  if (canSendEvents) {
+    if(buttonSingleClicked()) {
+      setValueSentOnAllFaces(MESSAGE_DAMAGE);
+      eventTimer.set(MESSAGE_TIMER_LENGTH);
+    } else {
+      setValueSentOnAllFaces(MESSAGE_NONE); // We want to explicitly send none by default.
+    }
+  }
+
+  // Stop sending events when eve
+  FOREACH_FACE(face) {
+    if (getLastValueReceivedOnFace(face) == MESSAGE_RECIEVED) {
+      setValueSentOnFace(MESSAGE_NONE, face);
+    }
+  }
+
+  // Listening for events
+  bool isListening = listeningTimer.isExpired();
+  if (isListening) {
+    FOREACH_FACE(face) {
+      if (isValueReceivedOnFaceExpired(face))
+        continue;
+      
+      if (getLastValueReceivedOnFace(face) == MESSAGE_DAMAGE) {
+        damageHealth();
+        setValueSentOnFace(MESSAGE_RECIEVED, face);
+        listeningTimer.set(LISTENING_TIMER_LENGTH);
+      }
+    }
+  }
 }
 
 // Display
