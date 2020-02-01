@@ -1,10 +1,9 @@
-#define ROLE_BASE     0
-#define ROLE_RESOURCE 1
-#define ROLE_HAZARD   2
-byte _role = ROLE_BASE;
+#define ROLE_HULL     0
+#define ROLE_HAZARD   1
+byte _role = ROLE_HULL;
 
 #define MAX_HEALTH 5
-#define START_HEALTH 3
+#define START_HEALTH 5
 byte _health = START_HEALTH;
 bool _isAlive = true;
 
@@ -26,6 +25,8 @@ void repairHealth() {
 }
 
 #define POINTER_FACE 5
+
+byte _hazardOffset = 0;
 
 void setup() {
 }
@@ -55,27 +56,26 @@ byte createMessageData(byte face) {
 void logic() {
   // Controls
   if (buttonDoubleClicked()) {
-    switch (_role) {
-      case ROLE_BASE:
-        if (isAlone()) {
-          _role = ROLE_HAZARD;
-        } else {
-          _role = ROLE_BASE;
-        }
-        break;
-      case ROLE_HAZARD:
-        _role = ROLE_BASE;
-        break;
-      case ROLE_RESOURCE:
-        _role = ROLE_BASE;
-        break;
+    if (isAlone()) {
+      _role = _role == ROLE_HULL ? ROLE_HAZARD : ROLE_HULL;
     }
   }
 
   if (buttonSingleClicked()) {
-    if (_isAlive) {
-      messageState[POINTER_FACE] = Repair;
-      damageHealth();
+    switch (_role) {
+      case ROLE_HULL:
+        if (_isAlive) {
+          messageState[POINTER_FACE] = Repair;
+          damageHealth();
+        }
+        break;
+      case ROLE_HAZARD:
+        messageState[(_hazardOffset + 0) % FACE_COUNT] = Damage;
+        messageState[(_hazardOffset + 2) % FACE_COUNT] = Damage;
+        messageState[(_hazardOffset + 4) % FACE_COUNT] = Damage;
+
+        _hazardOffset = (_hazardOffset + 1) % FACE_COUNT;
+        break;
     }
   }
 
@@ -116,7 +116,9 @@ void standardLoop(byte face) {
   // Handle Message
   switch (neighborMessage) {
     case Damage:
-      damageHealth();
+      if (_role == ROLE_HULL) {
+        damageHealth();
+      }
       messageState[(face + 3) % 6] = Damage;
       break;
     case Repair:
@@ -142,15 +144,18 @@ void activeLoop(byte face) {
 // Display
 void display() {
   switch (_role) {
-    case ROLE_BASE:
-      displayBase();
+    case ROLE_HULL:
+      displayHull();
+      break;
+    case ROLE_HAZARD:
+      displayHazard();
       break;
     default:
       setColor(WHITE);
   }
 }
 
-void displayBase() {
+void displayHull() {
   byte faceIndex = 0;
 
   if (!_isAlive) {
@@ -168,4 +173,16 @@ void displayBase() {
   }
 
   setColorOnFace(CYAN, POINTER_FACE);
+}
+
+
+#define DAMAGE_COLOR ORANGE
+#define NONDAMAGE_COLOR OFF
+void displayHazard() {
+  setColorOnFace(DAMAGE_COLOR,    (_hazardOffset + 0) % FACE_COUNT);
+  setColorOnFace(NONDAMAGE_COLOR, (_hazardOffset + 1) % FACE_COUNT);
+  setColorOnFace(DAMAGE_COLOR,    (_hazardOffset + 2) % FACE_COUNT);
+  setColorOnFace(NONDAMAGE_COLOR, (_hazardOffset + 3) % FACE_COUNT);
+  setColorOnFace(DAMAGE_COLOR,    (_hazardOffset + 4) % FACE_COUNT);
+  setColorOnFace(NONDAMAGE_COLOR, (_hazardOffset + 5) % FACE_COUNT);
 }
