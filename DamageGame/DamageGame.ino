@@ -3,43 +3,31 @@
 #define ROLE_HAZARD   2
 byte _role = ROLE_BASE;
 
-void setRole(byte role) {
-  _role = role;
-}
+#define MAX_HEALTH 5
+#define START_HEALTH 3
+byte _health = START_HEALTH;
+bool _isAlive = true;
 
-Color getRoleColor() {
-  switch (_role) {
-    case ROLE_BASE:
-      return GREEN;
-    case ROLE_RESOURCE:
-      return BLUE;
-    case ROLE_HAZARD:
-      return RED;
-    default:
-      return WHITE;
-  }
-}
-
-byte _health;
 void damageHealth() {
   if (_health == 0)
     return;
 
   --_health;
+
+  _isAlive = _health;
 }
 
 void repairHealth() {
   ++_health;
 
-  if (_health > 6) {
-    _health = 6;
+  if (_health > MAX_HEALTH) {
+    _health = MAX_HEALTH;
   }
 }
 
+#define POINTER_FACE 5
 
 void setup() {
-  setValueSentOnAllFaces(0);
-  _health = 6;
 }
 
 void loop() {
@@ -52,32 +40,45 @@ void loop() {
 enum messages { None, Recieved, Damage, Repair };
 byte messageState[6] = { None, None, None, None, None, None };
 
+bool getNeighborIsAlive(byte face) {
+  return getLastValueReceivedOnFace(face) >> 5;
+}
+
+byte getNeighborMessage(byte face) {
+  return getLastValueReceivedOnFace(face) & 0b00011111;
+}
+
+byte createMessageData(byte face) {
+  return _isAlive << 5 | messageState[face];
+}
+
 void logic() {
   // Controls
   if (buttonDoubleClicked()) {
     switch (_role) {
       case ROLE_BASE:
         if (isAlone()) {
-          setRole(ROLE_HAZARD);
+          _role = ROLE_HAZARD;
         } else {
-          setRole(ROLE_BASE);
+          _role = ROLE_BASE;
         }
         break;
       case ROLE_HAZARD:
-        setRole(ROLE_BASE);
+        _role = ROLE_BASE;
         break;
       case ROLE_RESOURCE:
-        setRole(ROLE_BASE);
+        _role = ROLE_BASE;
         break;
     }
   }
 
   if (buttonSingleClicked()) {
-    FOREACH_FACE(f) {
-      messageState[f] = Damage;
+    if (_isAlive) {
+      messageState[POINTER_FACE] = Repair;
+      damageHealth();
     }
   }
-  
+
   // Listen for messages
   FOREACH_FACE(f) {
     switch (messageState[f]) {
@@ -95,7 +96,7 @@ void logic() {
 
   // Set messages
   FOREACH_FACE(f) {
-    setValueSentOnFace(messageState[f], f);
+    setValueSentOnFace(createMessageData(f), f);
   }
 }
 
@@ -105,7 +106,7 @@ void standardLoop(byte face) {
     return;
 
   // Did the neighbor send a real message.
-  byte neighborMessage = getLastValueReceivedOnFace(face);
+  byte neighborMessage = getNeighborMessage(face);
   if (neighborMessage == None || neighborMessage == Recieved)
     return;
 
@@ -118,39 +119,53 @@ void standardLoop(byte face) {
       damageHealth();
       messageState[(face + 3) % 6] = Damage;
       break;
+    case Repair:
+      repairHealth();
+      break;
   }
 }
 
 void listeningLoop(byte face) {
   // The channel is clear.
-  if (isValueReceivedOnFaceExpired(face) || getLastValueReceivedOnFace(face) == None) {
+  if (isValueReceivedOnFaceExpired(face) || getNeighborMessage(face) == None) {
     messageState[face] = None;
   }
 }
 
 void activeLoop(byte face) {
   // Our message is recieved or there is no recipient
-  if (isValueReceivedOnFaceExpired(face) || getLastValueReceivedOnFace(face) == Recieved) {
+  if (isValueReceivedOnFaceExpired(face) || getNeighborMessage(face) == Recieved) {
     messageState[face] = None;
   }
 }
 
-
 // Display
 void display() {
-  displayHealth();
+  switch (_role) {
+    case ROLE_BASE:
+      displayBase();
+      break;
+    default:
+      setColor(WHITE);
+  }
 }
 
-void displayHealth() {
-  Color color = getRoleColor();
-
+void displayBase() {
   byte faceIndex = 0;
+
+  if (!_isAlive) {
+    setColor(OFF);
+    return;
+  }
+  
   while (faceIndex < _health) {
-    setColorOnFace(color, faceIndex);
+    setColorOnFace(GREEN, faceIndex);
     ++faceIndex;
   }
-  while (faceIndex < FACE_COUNT) {
+  while (faceIndex < POINTER_FACE) {
     setColorOnFace(OFF, faceIndex);
     ++faceIndex;
   }
+
+  setColorOnFace(CYAN, POINTER_FACE);
 }
