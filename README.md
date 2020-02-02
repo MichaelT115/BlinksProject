@@ -1,6 +1,8 @@
 # Pirates and Lasers (Global Game Jam 2020 Project)
 
-Official Page: https://globalgamejam.org/2020/games/lasers-and-pirates-1
+Interactive Instructions: https://xd.adobe.com/view/aad5f875-db09-40e0-737c-a66e5f190a34-dce4/?fullscreen&hints=off
+
+Official GGJ Page: https://globalgamejam.org/2020/games/lasers-and-pirates-1
 
 This is the repo for the Global Game Jam 2020 game Pirates and Lasers for the Blinks Platform (https://blinks.games/).
 
