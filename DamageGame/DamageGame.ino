@@ -47,10 +47,26 @@ bool getNeighborIsAlive(byte face)  { return getLastValueReceivedOnFace(face) >>
 byte getNeighborMessage(byte face)  { return getLastValueReceivedOnFace(face) & 0b00011111; }
 byte createMessageData(byte face)   { return (_health != 0) << 5 | messageState[face]; }
 
+bool isThereSingleSideConnections() {
+  FOREACH_FACE(face) {
+    if (!isValueReceivedOnFaceExpired(face)
+      && isValueReceivedOnFaceExpired((face + 5) % FACE_COUNT)
+      && isValueReceivedOnFaceExpired((face + 1) % FACE_COUNT))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 //
 // Gameplay
 //
 void gameplay() {
+  if (isThereSingleSideConnections()) {   
+    return;
+  }
+  
   // Toggle Role
   if (buttonLongPressed() && isAlone()) {
     _role = _role == ROLE_SHIP ? ROLE_HAZARD : ROLE_SHIP;
@@ -128,12 +144,12 @@ void handleMessage(byte face, byte message) {
       // Damage node on opposite side.
       messageState[(face + 3) % 6] = Damage;
     
-      if (_role == ROLE_SHIP) {
+      if (_role == ROLE_SHIP && _health) {
         damageHealth();
       }
       return;
     case Repair:
-      if (_role == ROLE_SHIP) {
+      if (_role == ROLE_SHIP && _health) {
         repairHealth();
       }
       return;
@@ -145,6 +161,16 @@ void handleMessage(byte face, byte message) {
 //
 
 void display() {
+  if (isThereSingleSideConnections()) {
+    setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 0) % 500) / 1000.0f) + 128), 0);
+    setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 1) % 500) / 1000.0f) + 128), 1);
+    setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 2) % 500) / 1000.0f) + 128), 2);
+    setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 3) % 500) / 1000.0f) + 128), 3);
+    setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 4) % 500) / 1000.0f) + 128), 4);
+    setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 5) % 500) / 1000.0f) + 128), 5);    
+    return;
+  }
+  
   switch (_role) {
     case ROLE_SHIP:
       displayShip();
