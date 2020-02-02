@@ -35,23 +35,29 @@ byte _hazardOffset = START_OFFSET;
 //
 // Communications
 //
-enum messages { 
+enum messages {
   None = 0,     // Placeholder when messages are not being set.
   Recieved = 1, // A message telling neighbor that their message has been recieved and processed.
   Damage = 2,   // A message telling neighbor to take damage
   Repair = 3,   // A message telling neighbor to repair.
 };
-byte messageState[6] = { None, None, None, None, None, None }; 
+byte messageState[6] = { None, None, None, None, None, None };
 
-bool getNeighborIsAlive(byte face)  { return getLastValueReceivedOnFace(face) >> 5; }
-byte getNeighborMessage(byte face)  { return getLastValueReceivedOnFace(face) & 0b00011111; }
-byte createMessageData(byte face)   { return (_health != 0) << 5 | messageState[face]; }
+bool getNeighborIsAlive(byte face)  {
+  return getLastValueReceivedOnFace(face) >> 5;
+}
+byte getNeighborMessage(byte face)  {
+  return getLastValueReceivedOnFace(face) & 0b00011111;
+}
+byte createMessageData(byte face)   {
+  return (_health != 0) << 5 | messageState[face];
+}
 
 bool isThereSingleSideConnections() {
   FOREACH_FACE(face) {
     if (!isValueReceivedOnFaceExpired(face)
-      && isValueReceivedOnFaceExpired((face + 5) % FACE_COUNT)
-      && isValueReceivedOnFaceExpired((face + 1) % FACE_COUNT))
+        && isValueReceivedOnFaceExpired((face + 5) % FACE_COUNT)
+        && isValueReceivedOnFaceExpired((face + 1) % FACE_COUNT))
     {
       return true;
     }
@@ -63,10 +69,10 @@ bool isThereSingleSideConnections() {
 // Gameplay
 //
 void gameplay() {
-  if (isThereSingleSideConnections()) {   
+  if (isThereSingleSideConnections()) {
     return;
   }
-  
+
   // Toggle Role
   if (buttonLongPressed() && isAlone()) {
     _role = _role == ROLE_SHIP ? ROLE_HAZARD : ROLE_SHIP;
@@ -74,7 +80,7 @@ void gameplay() {
   }
 
   if (buttonMultiClicked()) {
-     _health = MAX_HEALTH;
+    _health = MAX_HEALTH;
   }
 
   // Trigger Funtion
@@ -103,12 +109,12 @@ void gameplay() {
   FOREACH_FACE(face) {
     // There is no nieghbor, set message to none.
     if (isValueReceivedOnFaceExpired(face)) {
-       messageState[face] = None;
-       continue;
+      messageState[face] = None;
+      continue;
     }
 
     byte message = getNeighborMessage(face);
-    
+
     switch (messageState[face]) {
       case None:  // Face is listening for a message
         // If there is a valid message.
@@ -138,12 +144,12 @@ void gameplay() {
 void handleMessage(byte face, byte message) {
   // Mark that we recieved the message
   messageState[face] = Recieved;
-  
+
   switch (message) {
     case Damage:
       // Damage node on opposite side.
       messageState[(face + 3) % 6] = Damage;
-    
+
       if (_role == ROLE_SHIP && _health) {
         damageHealth();
       }
@@ -160,17 +166,20 @@ void handleMessage(byte face, byte message) {
 // Display
 //
 
+#define INVALID_COLOR YELLOW
+#define INVALID_COLOR_FACE(faceIndex) dim(INVALID_COLOR, 63 * (((millis() - 167 * faceIndex) % 500) / 1000.0f) + 128)
+
 void display() {
-  if (isThereSingleSideConnections()) {
+  /*if (isThereSingleSideConnections()) {
     setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 0) % 500) / 1000.0f) + 128), 0);
     setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 1) % 500) / 1000.0f) + 128), 1);
     setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 2) % 500) / 1000.0f) + 128), 2);
     setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 3) % 500) / 1000.0f) + 128), 3);
     setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 4) % 500) / 1000.0f) + 128), 4);
-    setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 5) % 500) / 1000.0f) + 128), 5);    
+    setColorOnFace(dim(BLUE, 63 * (((millis() - 167 * 5) % 500) / 1000.0f) + 128), 5);
     return;
-  }
-  
+    }*/
+
   switch (_role) {
     case ROLE_SHIP:
       displayShip();
@@ -183,23 +192,61 @@ void display() {
   }
 }
 
-#define DEAD_COLOR RED
+Color interpolate(const Color & c1, const Color & c2, float interpolant) {
+  const byte r = (c2.r - c1.r) * interpolant + c1.r;
+  const byte g = (c2.g - c1.g) * interpolant + c1.g;
+  const byte b = (c2.b - c1.b) * interpolant + c1.b;
+  return Color(r, g, b);
+}
+
+#define DEAD_COLOR_LOW Color(5, 76, 108)
+#define DEAD_COLOR_HIGH Color(0, 170, 255)
+#define DEAD_COLOR_SPEED 2000
+#define DEAD_COLOR_OFFSET (DEAD_COLOR_SPEED / 3)
+
 #define HEALTH_COLOR GREEN
 #define DAMAGED_COLOR OFF
 #define POINTER_COLOR MAGENTA
+
 void displayShip() {
+  if (isThereSingleSideConnections()) {
+    if (!_health) {
+      setColorOnFace(interpolate(INVALID_COLOR_FACE(0), DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 0) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 0);
+      setColorOnFace(interpolate(INVALID_COLOR_FACE(1), DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 1) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 1);
+      setColorOnFace(interpolate(INVALID_COLOR_FACE(2), DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 2) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 2);
+      setColorOnFace(interpolate(INVALID_COLOR_FACE(3), DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 3) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 3);
+      setColorOnFace(interpolate(INVALID_COLOR_FACE(4), DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 4) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 4);
+      setColorOnFace(interpolate(INVALID_COLOR_FACE(5), DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 5) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 5);
+      return;
+    }
+
+    byte faceIndex = 0;
+    while (faceIndex < _health) {
+      setColorOnFace(INVALID_COLOR_FACE(faceIndex), faceIndex);
+      ++faceIndex;
+    }
+    while (faceIndex < POINTER_FACE) {
+      setColorOnFace(DAMAGED_COLOR, faceIndex);
+      ++faceIndex;
+    }
+
+    setColorOnFace(POINTER_COLOR, POINTER_FACE);
+    return;
+  }
+
+
   if (!_health) {
-    setColorOnFace(dim(DEAD_COLOR, 255 * (((millis() - 167 * 0) % 1000) / 1000.0f)), 0);
-    setColorOnFace(dim(DEAD_COLOR, 255 * (((millis() - 167 * 1) % 1000) / 1000.0f)), 1);
-    setColorOnFace(dim(DEAD_COLOR, 255 * (((millis() - 167 * 2) % 1000) / 1000.0f)), 2);
-    setColorOnFace(dim(DEAD_COLOR, 255 * (((millis() - 167 * 3) % 1000) / 1000.0f)), 3);
-    setColorOnFace(dim(DEAD_COLOR, 255 * (((millis() - 167 * 4) % 1000) / 1000.0f)), 4);
-    setColorOnFace(dim(DEAD_COLOR, 255 * (((millis() - 167 * 5) % 1000) / 1000.0f)), 5);    
+    setColorOnFace(interpolate(DEAD_COLOR_LOW, DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 0) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 0);
+    setColorOnFace(interpolate(DEAD_COLOR_LOW, DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 1) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 1);
+    setColorOnFace(interpolate(DEAD_COLOR_LOW, DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 2) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 2);
+    setColorOnFace(interpolate(DEAD_COLOR_LOW, DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 3) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 3);
+    setColorOnFace(interpolate(DEAD_COLOR_LOW, DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 4) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 4);
+    setColorOnFace(interpolate(DEAD_COLOR_LOW, DEAD_COLOR_HIGH, (millis() + DEAD_COLOR_OFFSET * 5) % DEAD_COLOR_SPEED / (float)DEAD_COLOR_SPEED), 5);
     return;
   }
 
   byte faceIndex = 0;
-  
+
   while (faceIndex < _health) {
     setColorOnFace(HEALTH_COLOR, faceIndex);
     ++faceIndex;
@@ -212,9 +259,19 @@ void displayShip() {
   setColorOnFace(POINTER_COLOR, POINTER_FACE);
 }
 
-#define HAZARD_DAMAGE_COLOR ORANGE
+#define HAZARD_DAMAGE_COLOR RED
 #define HAZARD_NONDAMAGE_COLOR OFF
 void displayHazard() {
+  if (isThereSingleSideConnections()) {
+    setColorOnFace(HAZARD_DAMAGE_COLOR,                     (_hazardOffset + 0));
+    setColorOnFace(INVALID_COLOR_FACE( _hazardOffset + 1),  _hazardOffset + 1);
+    setColorOnFace(HAZARD_DAMAGE_COLOR,                     (_hazardOffset + 2));
+    setColorOnFace(INVALID_COLOR_FACE( _hazardOffset + 3),  _hazardOffset + 3);
+    setColorOnFace(HAZARD_DAMAGE_COLOR,                     (_hazardOffset + 4));
+    setColorOnFace(INVALID_COLOR_FACE( _hazardOffset + 5),  (_hazardOffset + 5) % FACE_COUNT);
+    return;
+  }
+
   setColorOnFace(HAZARD_DAMAGE_COLOR,    (_hazardOffset + 0));
   setColorOnFace(HAZARD_NONDAMAGE_COLOR, (_hazardOffset + 1));
   setColorOnFace(HAZARD_DAMAGE_COLOR,    (_hazardOffset + 2));
